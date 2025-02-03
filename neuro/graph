@@ -1,0 +1,8 @@
+digraph {
+	graph [rankdir=LR]
+	4324998656 [label="{ data 3. | grad 2. }" shape=record]
+	4325950160 [label="{ data 6. | grad 1. }" shape=record]
+	"4325950160+" [label="+"]
+	"4325950160+" -> 4325950160
+	4324998656 -> "4325950160+"
+}
