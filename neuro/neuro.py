@@ -1,6 +1,7 @@
 import numpy as np
 from graphviz import Digraph
 import math
+import random
 
 # Graphing Nodes
 
@@ -114,6 +115,58 @@ class Tensor:
                 print(f"Updated gradient of {other} to {other.grad}")
         out._backward = _backward
         return out
+    
+    def tmatmul(self, other ):
+        result = [[0 for _ in range(len(other.data[0]))] for _ in range(len(self.data))]
+        for x in range(len(self.data)):
+            for j in range(len(other.data[0])):
+                for k in range(len(other.data)):
+                    result[x][j] += self.data[x][k] * other.data[k][j]
+        out = Tensor(result, requires_grad=self.requires_grad)
+        return out 
+
+    def matmul(self, other ):
+        
+        result = [[0 for _ in range(len(other.data[0]))] for _ in range(len(self.data))]
+        for x in range(len(self.data)):
+            for j in range(len(other.data[0])):
+                result[x][j] = sum(self.data[x][k] * other.data[k][j] for k in range(len(other.data)))        
+        out = Tensor(result, requires_grad=self.requires_grad)
+        return out 
+
+    def fmatmul(self, other):
+        if not isinstance(other, Tensor):
+            other = Tensor(other)
+
+    # Transpose `other` for faster column access
+        other_T = list(zip(*other.data))
+
+    # Compute result using list comprehension (FAST)
+        result = [[sum(a * b for a, b in zip(row, col)) for col in other_T] for row in self.data]
+
+    # Create output tensor
+        out = Tensor(result, '*', requires_grad=self.requires_grad or other.requires_grad)
+        out._parents = {self, other}
+
+        def _backward():
+            if self.requires_grad:
+            # Compute gradient w.r.t. self: dL/dA = dL/dC * B^T
+                grad_self = [[sum(out.grad[i][k] * other.data[k][j] for k in range(len(other.data))) 
+                          for j in range(len(self.data[0]))] 
+                         for i in range(len(self.data))]
+            self.grad = grad_self
+
+            if other.requires_grad:
+            # Compute gradient w.r.t. other: dL/dB = A^T * dL/dC
+                grad_other = [[sum(self.data[k][i] * out.grad[k][j] for k in range(len(self.data))) 
+                           for j in range(len(other.data[0]))] 
+                          for i in range(len(other.data))]
+            other.grad = grad_other
+
+        out._backward = _backward
+
+        return out
+
     def sigmoid(self):
         x = self.data
         s = 1/(1+math.pow(math.e, (-1*x)))
@@ -137,7 +190,9 @@ class Tensor:
     def ones(shape: tuple[int,int]):
         data = [[1] * shape[1] for _ in range(shape[0])]
         return Tensor(data)
-        
+    def rand(shape: tuple[int, int], min, max):
+        data = [[random.randint(min, max)] * shape[1] for _ in range(shape[0])]
+        return Tensor(data)
     def sum(self):
         out = Tensor(np.sum(self.data), requires_grad=self.requires_grad)
 
@@ -151,15 +206,25 @@ class Tensor:
         out._backward = _backward
 
         return out
-
+def dot(vec, vec2):
+        if(len(vec) != len(vec2)):
+            raise ValueError("Vectors must have same length")
+        result = 0
+        for i in range(len(vec)):
+            result+=vec[i] * vec2[i]
+        return result
 # inputs x1,x2
-x = Tensor([[1, 2, 3], [4, 5, 6]], requires_grad=True)
-b = Tensor([1, 2, 3], requires_grad=True)  # Should be broadcasted across rows
-y = x + b  # Expected: [[2, 4, 6], [5, 7, 9]]
-print(y)
+x = Tensor.ones((300,400))
+b = Tensor.ones((300,400))  # Should be broadcasted across rows
+
+print(x.fmatmul(b))
 
 
+#14.3 tmatmul
+#13.7 matmul
+#
 
 #graph.render('graph', format='png')
   
 # Draw the computation graph
+
