@@ -1,10 +1,8 @@
+from typing import Optional
 import numpy as np
 from graphviz import Digraph
 import math
 import random
-
-# Graphing Nodes
-
 
 def trace(root):
     nodes, edges = set(), set()
@@ -27,27 +25,20 @@ def draw_dot(root, format='svg', rankdir='LR'):
     dot = Digraph(format=format, graph_attr={'rankdir': rankdir})
     
     for n in nodes:
-        # Format data and gradients to support tensors
         data_str = np.array2string(n.data, precision=4, separator=',', suppress_small=True)
         grad_str = np.array2string(n.grad, precision=4, separator=',', suppress_small=True) if n.grad is not None else "None"
 
-        # Create a node for the tensor
         dot.node(name=str(id(n)), label=f"{{ data {data_str} | grad {grad_str} }}", shape='record')
         
-        # If the tensor is the result of an operation, create an operation node
         if n._op:
             op_node_id = str(id(n)) + n._op
             dot.node(name=op_node_id, label=n._op)
-            # Connect the operation node to the tensor node
             dot.edge(op_node_id, str(id(n)))
     
-    # Add edges between tensors and their operation nodes
     for n1, n2 in edges:
         dot.edge(str(id(n1)), str(id(n2)) + n2._op)
     
     return dot
-
-
 
 class Tensor:
     def __init__(self, data, _op=None,requires_grad=False):
@@ -57,8 +48,10 @@ class Tensor:
         self._backward = lambda: None  
         self._parents = set()  
         self._op = _op
+      
+
     def __repr__(self):
-        return f"Tensor({self.data}, requires_grad={self.requires_grad})"
+        return f"Tensor({self.data}, requires_grad={self.requires_grad}, grad={self.grad}) "
 
     def backward(self):
         if self.data.size != 1:
@@ -114,59 +107,20 @@ class Tensor:
                 other.grad += self.data * out.grad
                 print(f"Updated gradient of {other} to {other.grad}")
         out._backward = _backward
-        return out
-    
-    def tmatmul(self, other ):
-        result = [[0 for _ in range(len(other.data[0]))] for _ in range(len(self.data))]
-        for x in range(len(self.data)):
-            for j in range(len(other.data[0])):
-                for k in range(len(other.data)):
-                    result[x][j] += self.data[x][k] * other.data[k][j]
-        out = Tensor(result, requires_grad=self.requires_grad)
-        return out 
+        return out  
+
 
     def matmul(self, other ):
+        assert self.data.shape[-1] == other.data.shape[-2]
         
-        result = [[0 for _ in range(len(other.data[0]))] for _ in range(len(self.data))]
-        for x in range(len(self.data)):
-            for j in range(len(other.data[0])):
-                result[x][j] = sum(self.data[x][k] * other.data[k][j] for k in range(len(other.data)))        
-        out = Tensor(result, requires_grad=self.requires_grad)
-        return out 
-
-    def fmatmul(self, other):
-        if not isinstance(other, Tensor):
-            other = Tensor(other)
-
-    # Transpose `other` for faster column access
-        other_T = list(zip(*other.data))
-
-    # Compute result using list comprehension (FAST)
-        result = [[sum(a * b for a, b in zip(row, col)) for col in other_T] for row in self.data]
-
-    # Create output tensor
-        out = Tensor(result, '*', requires_grad=self.requires_grad or other.requires_grad)
-        out._parents = {self, other}
+        out = Tensor(np.matmul(self.data,other.data), requires_grad=self.requires_grad)
 
         def _backward():
-            if self.requires_grad:
-            # Compute gradient w.r.t. self: dL/dA = dL/dC * B^T
-                grad_self = [[sum(out.grad[i][k] * other.data[k][j] for k in range(len(other.data))) 
-                          for j in range(len(self.data[0]))] 
-                         for i in range(len(self.data))]
-            self.grad = grad_self
+            if out.requires_grad:
+                dA = np.matmul()
+        return out 
 
-            if other.requires_grad:
-            # Compute gradient w.r.t. other: dL/dB = A^T * dL/dC
-                grad_other = [[sum(self.data[k][i] * out.grad[k][j] for k in range(len(self.data))) 
-                           for j in range(len(other.data[0]))] 
-                          for i in range(len(other.data))]
-            other.grad = grad_other
-
-        out._backward = _backward
-
-        return out
-
+    
     def sigmoid(self):
         x = self.data
         s = 1/(1+math.pow(math.e, (-1*x)))
@@ -187,9 +141,10 @@ class Tensor:
         out._backward = _backward
 
         return out
+    
+ 
     def ones(shape: tuple[int,int]):
-        data = [[1] * shape[1] for _ in range(shape[0])]
-        return Tensor(data)
+        return Tensor(np.full((shape[0], shape[1]), 1, dtype=np.float32))
     def rand(shape: tuple[int, int], min, max):
         data = [[random.randint(min, max)] * shape[1] for _ in range(shape[0])]
         return Tensor(data)
@@ -213,18 +168,40 @@ def dot(vec, vec2):
         for i in range(len(vec)):
             result+=vec[i] * vec2[i]
         return result
-# inputs x1,x2
-x = Tensor.ones((300,400))
-b = Tensor.ones((300,400))  # Should be broadcasted across rows
+# Define Tensors
+a = Tensor(2, requires_grad=True)  # a = 2
+b = Tensor(3, requires_grad=True)  # b = 3
+c = Tensor(4, requires_grad=True)  # c = 4
+d = Tensor(5, requires_grad=True)  # d = 5
+e = Tensor(6, requires_grad=True)  # e = 6
 
-print(x.fmatmul(b))
+# Compute: L = ((a + b) * c + d) * e
+f = a + b   # f = (2 + 3) = 5
+g = f * c   # g = 5 * 4 = 20
+h = g + d   # h = 20 + 5 = 25
+L = h * e   # L = 25 * 6 = 150
 
+print("Before backpropagation:")
+print(f"a: {a}")
+print(f"b: {b}")
+print(f"c: {c}")
+print(f"d: {d}")
+print(f"e: {e}")
+print(f"f: {f}")
+print(f"g: {g}")
+print(f"h: {h}")
+print(f"L: {L}")
 
-#14.3 tmatmul
-#13.7 matmul
-#
+# Perform backpropagation
+L.backward()
 
-#graph.render('graph', format='png')
-  
-# Draw the computation graph
-
+print("\nAfter backpropagation:")
+print(f"a: {a}")
+print(f"b: {b}")
+print(f"c: {c}")
+print(f"d: {d}")
+print(f"e: {e}")
+print(f"f: {f}")
+print(f"g: {g}")
+print(f"h: {h}")
+print(f"L: {L}")
