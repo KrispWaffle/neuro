@@ -116,8 +116,11 @@ class Tensor:
         out = Tensor(np.matmul(self.data,other.data), requires_grad=self.requires_grad)
 
         def _backward():
-            if out.requires_grad:
-                dA = np.matmul()
+            if self.requires_grad:
+                self.grad = out.grad @ other.data.T
+            if other.requires_grad:
+                other.grad = self.data.T @ out.grad
+        out._backward = _backward
         return out 
 
     
