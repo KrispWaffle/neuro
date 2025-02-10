@@ -21,5 +21,5 @@ L = h * e   # L = 25 * 6 = 150
 L.backward()
 graph = draw_dot(L)
 graph.render('test', format='png')
-print(a.data.shape[0])
+
 

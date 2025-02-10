@@ -3,7 +3,15 @@ import numpy as np
 from graphviz import Digraph
 import math
 import random
+import os
+import logging
 
+DEBUG = os.getenv("DEBUG") == "1"
+
+logging.basicConfig(
+    level=logging.DEBUG if DEBUG else logging.INFO,
+    format="%(message)s"  
+)
 def trace(root):
     nodes, edges = set(), set()
     def build(v):
@@ -61,7 +69,7 @@ class Tensor:
         else:
             self.grad  = np.ones_like(self.data)
         
-        print(f"Initialized gradient of {self} to {self.grad}")
+        logging.debug(f"Initialized gradient of {self} to {self.grad}")
 
        
         visited = set()
@@ -76,7 +84,7 @@ class Tensor:
 
       
         for tensor in reversed(topo):
-            print(f"Backpropagating through {tensor}")
+            logging.debug(f"Backpropagating through {tensor}")
             tensor._backward()
 
     def __add__(self, other):
@@ -90,10 +98,10 @@ class Tensor:
         def _backward():
             if self.requires_grad:
                 self.grad += out.grad
-                print(f"Updated gradient of {self} to {self.grad}")
+                logging.debug(f"Updated gradient of {self} to {self.grad}")
             if other.requires_grad:
                 other.grad += out.grad
-                print(f"Updated gradient of {other} to {other.grad}")
+                logging.debug(f"Updated gradient of {other} to {other.grad}")
         out._backward = _backward
 
         return out
@@ -105,10 +113,10 @@ class Tensor:
         def _backward():
             if self.requires_grad:
                 self.grad += other.data * out.grad
-                print(f"Updated gradient of {self} to {self.grad}")
+                logging.debug(f"Updated gradient of {self} to {self.grad}")
             if other.requires_grad:
                 other.grad += self.data * out.grad
-                print(f"Updated gradient of {other} to {other.grad}")
+                logging.debug(f"Updated gradient of {other} to {other.grad}")
         out._backward = _backward
         return out  
 
@@ -163,7 +171,7 @@ class Tensor:
         def _backward():
             if self.requires_grad:
                 self.grad += np.ones_like(self.data) * out.grad
-                print(f"Updated gradient of {self} to {self.grad}")
+                logging.debug(f"Updated gradient of {self} to {self.grad}")
         out._backward = _backward
 
         return out
