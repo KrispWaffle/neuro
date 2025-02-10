@@ -24,19 +24,15 @@ def trace(root):
     return nodes, edges
 
 def draw_dot(root, format='svg', rankdir='LR'):
-    """
-    format: png | svg | ...
-    rankdir: TB (top to bottom graph) | LR (left to right)
-    """
-    assert rankdir in ['LR', 'TB']
     nodes, edges = trace(root)
     dot = Digraph(format=format, graph_attr={'rankdir': rankdir})
     
     for n in nodes:
         data_str = np.array2string(n.data, precision=4, separator=',', suppress_small=True)
         grad_str = np.array2string(n.grad, precision=4, separator=',', suppress_small=True) if n.grad is not None else "None"
-
-        dot.node(name=str(id(n)), label=f"{{ data {data_str} | grad {grad_str} }}", shape='record')
+        shape_str = str(n.data.shape)
+        label = f"{{ data {data_str} | grad {grad_str} | shape {shape_str} }}"
+        dot.node(name=str(id(n)), label=label, shape='record')
         
         if n._op:
             op_node_id = str(id(n)) + n._op
@@ -105,6 +101,26 @@ class Tensor:
         out._backward = _backward
 
         return out
+    def __sub__(self, other):
+        if not isinstance(other, Tensor):
+            other = Tensor(other)
+        out = Tensor(self.data - other.data,'-', requires_grad=self.requires_grad or other.requires_grad,)
+
+
+        out._parents.update({self, other})
+
+        def _backward():
+            if self.requires_grad:
+                self.grad += out.grad
+                logging.debug(f"Updated gradient of {self} to {self.grad}")
+            if other.requires_grad:
+                other.grad += out.grad
+                logging.debug(f"Updated gradient of {other} to {other.grad}")
+        out._backward = _backward
+
+        return out
+    
+
     def __mul__(self,other):
         if not isinstance(other, Tensor):
             other = Tensor(other)
@@ -120,7 +136,37 @@ class Tensor:
         out._backward = _backward
         return out  
 
+    def __truediv__(self, other):
+        if not isinstance(other, Tensor):
+            other = Tensor(other)
+        out = Tensor(self.data/other.data, "/",  requires_grad=self.requires_grad or other.requires_grad)
+        out._parents.update({self,other})
+        def _backward():
+            if self.requires_grad:
+                self.grad += (1/other.grad) * out.grad
+                logging.debug(f"Updated gradient of {self} to {self.grad}")
+            if other.requires_grad:
+                other.grad += (-self.grad/(other.grad**2))*out.grad
+                logging.debug(f"Updated gradient of {self} to {self.grad}")
+        out._backward=_backward
+        return out
+    def __pow__(self, other):
+        if not isinstance(other, Tensor):
+            other = Tensor(other)
+        out = Tensor(self.data ** other.data, '**', requires_grad=self.requires_grad or other.requires_grad)
+        out._parents.update({self,other})
 
+        def _backward():
+            if self.requires_grad:
+                self.grad += (other*self.data**(other-1)) *out.grad
+                logging.debug(f"Updated gradient of {self} to {self.grad}")
+
+            if other.requires_grad:
+                other.grad+=((self.data**other)*np.log(math.e))*out.grad
+                logging.debug(f"Updated gradient of {self} to {self.grad}")
+        out._backward = _backward
+        return out
+        
     def matmul(self, other ):
         assert self.data.shape[-1] == other.data.shape[-2]
         
@@ -128,9 +174,9 @@ class Tensor:
 
         def _backward():
             if self.requires_grad:
-                self.grad = out.grad @ other.data.T
+                self.grad += out.grad @ other.data.T
             if other.requires_grad:
-                other.grad = self.data.T @ out.grad
+                other.grad += self.data.T @ out.grad
         out._backward = _backward
         return out 
 
@@ -147,7 +193,7 @@ class Tensor:
         return out
     def tanh(self):
         x = self.data
-        t = (math.exp(2*x) - 1)/(math.exp(2*x) + 1)
+        t = (np.exp(2*x) - 1)/(np.exp(2*x) + 1)
         out = Tensor(t,'tanh', requires_grad=self.requires_grad)
         out._parents = {self}
         def _backward():
@@ -160,8 +206,9 @@ class Tensor:
     def ones(shape: tuple[int,int]):
         return Tensor(np.full((shape[0], shape[1]), 1, dtype=np.float32))
     def rand(shape: tuple[int, int], min, max):
-        data = [[random.randint(min, max)] * shape[1] for _ in range(shape[0])]
-        return Tensor(data)
+        
+        return Tensor(np.random.randint(min,max, size=shape))
+
     def sum(self):
         out = Tensor(np.sum(self.data), requires_grad=self.requires_grad)
 
