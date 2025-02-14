@@ -5,13 +5,9 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../")))
 from src.neuro import *
 
 
-
-x = Tensor.rand((3000,4000), 1,10)
-y = Tensor.rand((3000,4000), 1,10)
-
-z = x**y
-
-print(z)
+x= Tensor([[1.0, 2.0, 3.0, 4.0, 1.0, 2.0, 3.0],[1.0, 2.0, 3.0, 4.0, 1.0, 2.0, 3.0]])
+y = x.softmax()
+print(y.sum())
 
 
 

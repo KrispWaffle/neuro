@@ -180,12 +180,27 @@ class Tensor:
         out._backward = _backward
         return out 
 
-    
+    def relu(self):
+        if hasattr(self.data, "shape") and len(self.data.shape) >= 2:
+            y = np.where(self.data >0,self.data,0)
+        else:
+            y= self.data if self.data>0 else 0
+
+
+        out = Tensor(y, 'relu', requires_grad=self.requires_grad)  
+        
+        out._parents.update({self})
+        def _backward():
+            if self.requires_grad:
+                self.grad += (np.where(self.data >0,1 ,0.0)) * out.grad
+        out._backward = _backward
+        return out
+        
     def sigmoid(self):
         x = self.data
         s = 1/(1+math.pow(math.e, (-1*x)))
         out = Tensor(s,'sigmoid',requires_grad=self.requires_grad )
-        out._parents = {self}
+        out._parents.update(self)
         def _backward():
             if self.requires_grad:
                self.grad += s * (1 - s) * out.grad
@@ -202,7 +217,11 @@ class Tensor:
 
         return out
     
- 
+    def softmax(self):
+        beta = 1.0
+        x= np.exp(beta * self.data) / np.sum(np.exp(beta * self.data))
+        out = Tensor(x, 'softmax', requires_grad=self.requires_grad)
+        return out
     def ones(shape: tuple[int,int]):
         return Tensor(np.full((shape[0], shape[1]), 1, dtype=np.float32))
     def rand(shape: tuple[int, int], min, max):
