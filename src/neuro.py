@@ -6,11 +6,13 @@ import random
 import os
 import logging
 
-DEBUG = os.getenv("DEBUG") == "1"
-
+ 
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG if os.getenv("DEBUG") == "1" else logging.INFO)
 logging.basicConfig(
-    level=logging.DEBUG if DEBUG else logging.INFO,
-    format="%(message)s"  
+    level=logger.level,
+    format="%(asctime)s - %(levelname)s - %(name)s - %(funcName)s - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
 )
 def trace(root):
     nodes, edges = set(), set()
@@ -43,7 +45,15 @@ def draw_dot(root, format='svg', rankdir='LR'):
         dot.edge(str(id(n1)), str(id(n2)) + n2._op)
     
     return dot
-
+def log_operation(op_name):
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            logger.debug(f"Entering {op_name} with args={args}, kwargs={kwargs}")
+            result = func(*args, **kwargs)
+            logger.debug(f"Exiting {op_name} with result={result}")
+            return result
+        return wrapper
+    return decorator
 class Tensor:
     def __init__(self, data, _op=None,requires_grad=False):
         self.data = np.array(data, dtype=np.float32)
@@ -82,7 +92,7 @@ class Tensor:
         for tensor in reversed(topo):
             logging.debug(f"Backpropagating through {tensor}")
             tensor._backward()
-
+    @log_operation("addition")
     def __add__(self, other):
         if not isinstance(other, Tensor):
             other = Tensor(other)
@@ -101,6 +111,7 @@ class Tensor:
         out._backward = _backward
 
         return out
+    @log_operation("subtraction")
     def __sub__(self, other):
         if not isinstance(other, Tensor):
             other = Tensor(other)
@@ -120,7 +131,7 @@ class Tensor:
 
         return out
     
-
+    @log_operation("multiply")
     def __mul__(self,other):
         if not isinstance(other, Tensor):
             other = Tensor(other)
@@ -135,7 +146,7 @@ class Tensor:
                 logging.debug(f"Updated gradient of {other} to {other.grad}")
         out._backward = _backward
         return out  
-
+    @log_operation("truediv")
     def __truediv__(self, other):
         if not isinstance(other, Tensor):
             other = Tensor(other)
@@ -150,10 +161,14 @@ class Tensor:
                 logging.debug(f"Updated gradient of {self} to {self.grad}")
         out._backward=_backward
         return out
+    @log_operation("pow")
     def __pow__(self, other):
         if not isinstance(other, Tensor):
             other = Tensor(other)
+
+        
         out = Tensor(self.data ** other.data, '**', requires_grad=self.requires_grad or other.requires_grad)
+        
         out._parents.update({self,other})
 
         def _backward():
@@ -166,12 +181,12 @@ class Tensor:
                 logging.debug(f"Updated gradient of {self} to {self.grad}")
         out._backward = _backward
         return out
-        
+    @log_operation("matmul")    
     def matmul(self, other ):
         assert self.data.shape[-1] == other.data.shape[-2]
         
         out = Tensor(np.matmul(self.data,other.data), requires_grad=self.requires_grad)
-
+        out._parents.update({self,other})
         def _backward():
             if self.requires_grad:
                 self.grad += out.grad @ other.data.T
@@ -179,23 +194,29 @@ class Tensor:
                 other.grad += self.data.T @ out.grad
         out._backward = _backward
         return out 
-
+    @log_operation("relu")
     def relu(self):
-        if hasattr(self.data, "shape") and len(self.data.shape) >= 2:
+        if hasattr(self.data, "shape") or len(self.data.shape) >= 2:
             y = np.where(self.data >0,self.data,0)
         else:
-            y= self.data if self.data>0 else 0
+            y = self.data if self.data>0 else 0
 
 
-        out = Tensor(y, 'relu', requires_grad=self.requires_grad)  
+        out = Tensor(y, 'relu', requires_grad=self.requires_grad)
         
         out._parents.update({self})
         def _backward():
             if self.requires_grad:
-                self.grad += (np.where(self.data >0,1 ,0.0)) * out.grad
+                if hasattr(self.data, "shape") or len(self.data.shape) >= 2:
+                   grad_mask = np.where(self.data> 0,1,0)     
+                else:
+                    grad_mask = 1.0 if self.data > 0 else 0.0
+                print(f"selfgrad {self.grad}")
+                print(f"gradmask {grad_mask}")    
+                self.grad=self.grad + grad_mask*out.grad 
         out._backward = _backward
         return out
-        
+    @log_operation("sigmoid")    
     def sigmoid(self):
         x = self.data
         s = 1/(1+math.pow(math.e, (-1*x)))
@@ -203,25 +224,28 @@ class Tensor:
         out._parents.update(self)
         def _backward():
             if self.requires_grad:
+               
                self.grad += s * (1 - s) * out.grad
+               logging.debug(f"Updated gradient of {self} to {self.grad}")
         out._backward = _backward
         return out
+    @log_operation("tanh")
     def tanh(self):
         x = self.data
         t = (np.exp(2*x) - 1)/(np.exp(2*x) + 1)
         out = Tensor(t,'tanh', requires_grad=self.requires_grad)
+
         out._parents = {self}
         def _backward():
             self.grad += (1 - t**2) * out.grad
+            logging.debug(f"Updated gradient of {self} to {self.grad}")
         out._backward = _backward
 
         return out
     
-    def softmax(self):
-        beta = 1.0
-        x= np.exp(beta * self.data) / np.sum(np.exp(beta * self.data))
-        out = Tensor(x, 'softmax', requires_grad=self.requires_grad)
-        return out
+    
+    
+    
     def ones(shape: tuple[int,int]):
         return Tensor(np.full((shape[0], shape[1]), 1, dtype=np.float32))
     def rand(shape: tuple[int, int], min, max):
@@ -230,10 +254,11 @@ class Tensor:
 
     def sum(self):
         out = Tensor(np.sum(self.data), requires_grad=self.requires_grad)
+        logging.debug(f"output tensor for sum created {out}")
 
 
         out._parents = {self}
-
+        logging.debug(f"parent tensors saved {out._parents}")
         def _backward():
             if self.requires_grad:
                 self.grad += np.ones_like(self.data) * out.grad
@@ -248,3 +273,38 @@ def dot(vec, vec2):
         for i in range(len(vec)):
             result+=vec[i] * vec2[i]
         return result
+
+
+@log_operation("softmax")
+def softmax(tensor, beta=1):
+        
+        scaled = tensor.data * beta
+        shifted = scaled - np.max(scaled, axis=-1, keepdims=True)
+        exp = np.exp(shifted)
+        probs = exp / np.sum(exp, axis=-1, keepdims=True)
+        
+        out = Tensor(probs, 'softmax', requires_grad=tensor.requires_grad)
+
+        out._parents.update({tensor})
+        def _backward():
+            if tensor.requires_gread:
+                jacobian =np.diagflat(probs) - np.outer(probs,probs)
+                tensor.grad += jacobian @ out.grad
+        out._backward = _backward
+        return out
+        
+@log_operation("Cross-entropy loss")    
+def crossELoss(logits,y_true):
+        probs = softmax(logits)
+        eps = 1e-12
+        probs_clipped = np.clip(probs.data, eps, 1 - eps)
+        loss = -np.sum(y_true * np.log(probs_clipped)) / y_true.shape[0]
+        loss_tensor = Tensor(loss, "cross_entropy", requires_grad=logits.requires_grad)
+        loss_tensor._parents = {logits}
+        def _backward():
+            if logits.requires_grad:
+            # Gradient: (probs - y_true)
+                grad = (probs.data - y_true) / y_true.shape[0]
+                logits.grad += grad
+        loss_tensor._backward = _backward
+        return loss_tensor
