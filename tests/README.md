@@ -4,6 +4,6 @@ Use
 ```python
 DEBUG=1 python XXXX.py
 ``` 
-when running the tests or you will have no good output
+when running the tests to see different debug logs
 
 
