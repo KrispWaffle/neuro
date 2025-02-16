@@ -1,5 +1,5 @@
 To-Do
-  - Tensor.softmax().
+  
   - Implement MSELoss() and CrossEntropyLoss().
   - Add a simple SGD optimizer.
   - Create a Linear layer class.
@@ -9,7 +9,7 @@ To-Do
 
 
 Current 
-
+- Tensor.softmax().
 
 
 
