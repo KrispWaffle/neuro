@@ -196,7 +196,7 @@ class Tensor:
         return out 
     @log_operation("relu")
     def relu(self):
-        if hasattr(self.data, "shape") or len(self.data.shape) >= 2:
+        if hasattr(self.data, "shape") or len(self.data.shape[2]) > 2:
             y = np.where(self.data >0,self.data,0)
         else:
             y = self.data if self.data>0 else 0
@@ -207,13 +207,15 @@ class Tensor:
         out._parents.update({self})
         def _backward():
             if self.requires_grad:
-                if hasattr(self.data, "shape") or len(self.data.shape) >= 2:
-                   grad_mask = np.where(self.data> 0,1,0)     
+                if hasattr(self.data, "shape") or len(self.data.shape[2]) >= 2:
+                   
+                   grad_mask = np.array(np.where(self.data> 0,1,0))   
                 else:
+                    print("Applied2")
                     grad_mask = 1.0 if self.data > 0 else 0.0
-                print(f"selfgrad {self.grad}")
-                print(f"gradmask {grad_mask}")    
-                self.grad=self.grad + grad_mask*out.grad 
+                
+                self.grad=self.grad + grad_mask 
+                
         out._backward = _backward
         return out
     @log_operation("sigmoid")    
@@ -221,7 +223,7 @@ class Tensor:
         x = self.data
         s = 1/(1+math.pow(math.e, (-1*x)))
         out = Tensor(s,'sigmoid',requires_grad=self.requires_grad )
-        out._parents.update(self)
+        out._parents.update({self})
         def _backward():
             if self.requires_grad:
                
