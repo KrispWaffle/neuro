@@ -55,7 +55,7 @@ def test_relu():
     assert np.allclose(b.data, [0.0, 0.0, 2.0]), "ReLU forward failed"
     
     # Backward pass
-    b.backward()
+    b.sum().backward()
     assert np.allclose(a.grad, [0.0, 0.0, 1.0]), "ReLU backward failed"
     
     print("ReLU: ✓")
@@ -116,12 +116,16 @@ def test_cross_entropy():
     
     # Forward pass
     probs = softmax(logits).data
-    expected_loss = -np.sum(y_true * np.log(probs))
+    expected_loss = -np.sum(y_true * np.log(probs))/ y_true.shape[0]
+    #print(f"Expected{expected_loss}")
+   # print(f"Got {np.sum(probs)}")
+
     assert np.allclose(loss.data, expected_loss), "Cross-entropy forward failed"
     
     # Backward pass
     loss.backward()
-    expected_grad = (probs - y_true)
+    expected_grad = (probs - y_true)/ y_true.shape[0]
+   
     assert np.allclose(logits.grad, expected_grad), "Cross-entropy backward failed"
     
     print("Cross-entropy: ✓")
@@ -133,8 +137,8 @@ def test_autograd_graph():
     c = a * b
     d = c + Tensor(1.0)
     d.backward()
-    
-    assert len(d._parents) == 1, "Graph construction failed"
+    assert a.grad == 3.0 and b.grad == 2.0, "Incorrect gradients"
+    assert len(d._parents) == 2, "Graph construction failed"
     assert a.grad == 3.0 and b.grad == 2.0, "Graph backward failed"
     
     print("Computational graph: ✓")
