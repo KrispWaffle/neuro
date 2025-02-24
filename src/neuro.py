@@ -46,27 +46,30 @@ def draw_dot(root, format='svg', rankdir='LR'):
     
     return dot
 def log_operation(op_name):
+   
     def decorator(func):
         def wrapper(*args, **kwargs):
+            
             logger.debug(f"Entering {op_name} with args={args}, kwargs={kwargs}")
+            
             result = func(*args, **kwargs)
             logger.debug(f"Exiting {op_name} with result={result}")
+ 
+            
             return result
+        
         return wrapper
+   
     return decorator
-class Tensor:
-    def __init__(self, data, _op=None,requires_grad=False):
-        self.data = np.array(data, dtype=np.float32)
+
+class Node:
+    def __init__(self, data,dtype, _op=None,requires_grad=False, ):
+        self.data = np.array(data, dtype=dtype)
         self.requires_grad = requires_grad
         self.grad = np.zeros_like(self.data) if requires_grad else None
         self._backward = lambda: None  
         self._parents = set()  
         self._op = _op
-      
-
-    def __repr__(self):
-        return f"Tensor({self.data}, requires_grad={self.requires_grad}, grad={self.grad}) "
-
     def backward(self):
         if self.data.shape == ():
             self.grad = np.ones_like(self.data)
@@ -80,6 +83,7 @@ class Tensor:
        
         visited = set()
         topo = []
+
         def build_topo(tensor):
             if tensor not in visited:
                 visited.add(tensor)
@@ -92,6 +96,33 @@ class Tensor:
         for tensor in reversed(topo):
             logging.debug(f"Backpropagating through {tensor}")
             tensor._backward()
+        
+class Tensor:
+    
+    def __init__(self, data,dtype=np.float32, _op=None,requires_grad=False, _parents=None):
+       self.node  = Node(np.array(data,dtype=dtype,),dtype, _op,_parents)
+       self.requires_grad = requires_grad     
+
+    @property
+    def data(self):
+        return self.node.data
+    @property
+    def grad(self):
+        return self.node.grad
+    @grad.setter
+    def grad(self, value):
+        self.node.grad = value
+    
+    def backward(self):
+        if self.requires_grad:
+            self.node.backward()
+
+
+
+    def __repr__(self):
+        return f"Tensor({self.data}, requires_grad={self.requires_grad}, grad={self.grad}) "
+
+    
     @log_operation("addition")
     def __add__(self, other):
         if not isinstance(other, Tensor):
@@ -246,7 +277,9 @@ class Tensor:
         return out
     
     
-    
+    def zero_grad(self):
+        self.grad = 0
+        return self
     
     def ones(shape: tuple[int,int]):
         return Tensor(np.full((shape[0], shape[1]), 1, dtype=np.float32))
@@ -289,9 +322,10 @@ def softmax(tensor, beta=1):
 
         out._parents.update({tensor})
         def _backward():
-            if tensor.requires_gread:
+            if tensor.requires_grad:
                 jacobian =np.diagflat(probs) - np.outer(probs,probs)
                 tensor.grad += jacobian @ out.grad
+                logging.debug(f"Updated gradient of {tensor} to {tensor.grad}")
         out._backward = _backward
         return out
         
@@ -308,5 +342,13 @@ def crossELoss(logits,y_true):
             # Gradient: (probs - y_true)
                 grad = (probs.data - y_true) / y_true.shape[0]
                 logits.grad += grad
+                logging.debug(f"Updated gradient of {logits} to {logits.grad}")
         loss_tensor._backward = _backward
         return loss_tensor
+
+def MSE(y,x ):
+    error = 0 
+    n  = range(len(y.data))
+    for i in n:
+        error += math.pow(y.data[i] - x.data[i],2)
+    return error/len(y.data)
