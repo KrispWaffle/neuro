@@ -1,4 +1,4 @@
-To-Do
+### To-Do
   
   
   - Add a simple SGD optimizer.
@@ -8,12 +8,12 @@ To-Do
 
 
 
-Current 
+## Current 
   - Implement MSELoss()
 
 
 
-Done:
+## Done:
   [x] working on finishing matmul need to add back prop 
   [x] grad prop with tensor values (other than scalars)
   [x] Add Tensor.relu()
