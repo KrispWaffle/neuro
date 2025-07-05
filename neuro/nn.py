@@ -44,7 +44,7 @@ def crossELoss(logits,y_true):
                 logging.debug(f"Updated gradient of {logits} to {logits.grad}")
         loss_tensor._backward = _backward
         return loss_tensor
-
+@log_operation("MSE")   
 def MSE(y,x ):
     error = 0 
     n  = range(len(y.data))
