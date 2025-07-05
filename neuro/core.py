@@ -62,14 +62,24 @@ def log_operation(op_name):
    
     return decorator
 
-class Node:
-    def __init__(self, data,dtype, _op=None,requires_grad=False, ):
-        self.data = np.array(data, dtype=dtype)
+
+        
+class Tensor:
+    
+    def __init__(self, data, _op=None,requires_grad=False):
+
+        self.data = np.array(data, dtype=np.float32)
+
         self.requires_grad = requires_grad
+
         self.grad = np.zeros_like(self.data) if requires_grad else None
+
         self._backward = lambda: None  
+
         self._parents = set()  
+
         self._op = _op
+    
     def backward(self):
         if self.data.shape == ():
             self.grad = np.ones_like(self.data)
@@ -96,26 +106,6 @@ class Node:
         for tensor in reversed(topo):
             logging.debug(f"Backpropagating through {tensor}")
             tensor._backward()
-        
-class Tensor:
-    
-    def __init__(self, data,dtype=np.float32, _op=None,requires_grad=False, _parents=None):
-       self.node  = Node(np.array(data,dtype=dtype,),dtype, _op,_parents)
-       self.requires_grad = requires_grad     
-
-    @property
-    def data(self):
-        return self.node.data
-    @property
-    def grad(self):
-        return self.node.grad
-    @grad.setter
-    def grad(self, value):
-        self.node.grad = value
-    
-    def backward(self):
-        if self.requires_grad:
-            self.node.backward()
 
 
 

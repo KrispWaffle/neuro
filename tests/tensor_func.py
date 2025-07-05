@@ -2,7 +2,7 @@ import sys
 import os
 import numpy as np
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../")))
-from src.neuro import *
+
 
 def test_backwardFunc():
     scalar = Tensor(3.0, requires_grad=True)

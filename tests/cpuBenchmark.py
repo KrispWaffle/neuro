@@ -2,7 +2,7 @@ import sys
 import os
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../")))
-from src.neuro import *
+from neuro.core import *
 
 A = Tensor.rand((4096,4096), 1,20)
 B = Tensor.rand((4096,4096), 1,20)

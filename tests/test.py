@@ -2,7 +2,7 @@ import sys
 import os
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../")))
-from src.neuro import *
+from neuro.neuro import *
 
 
 x = Tensor([1,3,4])
