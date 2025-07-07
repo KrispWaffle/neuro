@@ -2,7 +2,7 @@ import sys
 import os
 import numpy as np
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../")))
-from neuro.tensor import Tensor
+from neuro.core import Tensor
 
 x = Tensor([0.0, 0.0, 1.0], requires_grad=True)
 print(x.data)
