@@ -1,21 +1,7 @@
 #  Neuro — A Lightweight Autograd Tensor Library
 
-**Neuro** is a minimalist NumPy-based tensor library built for learning and experimentation. It features basic tensor operations with automatic differentiation (autograd), inspired by deep learning frameworks like PyTorch and Tinygrad, but written from scratch for clarity and extensibility.
-
----
-
-##  Features
-
-- ✅ NumPy-backed `Tensor` class  
-- ✅ Automatic differentiation (reverse-mode autodiff)  
-- ✅ Core tensor ops: `+`, `-`, `*`, `/`, `**`, `matmul`  
-- ✅ Activation functions: `relu`, `sigmoid`, `tanh`  
-- ✅ Simple graph visualization using `Graphviz`  
-- ✅ Logging and operation tracing for debugging  
-- ✅ `backward()` support for computing gradients  
-- ✅ Easy-to-extend with decorators like `@log_operation`
-
----
+**Neuro** is a minimalist NumPy-based tensor library made for learning and just messing around.
+Future goal being adding support for generating optimized GPU and CPU kernels.  
 
 ##  Example
 
