@@ -1,11 +1,8 @@
 from typing import Optional, Type
 import numpy as np
-
-import math
-import random
 import os
 import logging
-
+from codegen import example
  
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG if os.getenv("DEBUG") == "1" else logging.INFO)
@@ -63,7 +60,6 @@ class Tensor:
         self._ctx: Optional[Op] = None
         self.shape = np.shape(self.data)                       
 
- 
     def backward(self):
         
         visited, topo = set(), []
@@ -76,8 +72,7 @@ class Tensor:
                     build(p)
             topo.append(t)
         build(self)
-
-      
+  
         self.grad = np.ones_like(self.data)
         for t in reversed(topo):
             if t._ctx:
@@ -88,9 +83,6 @@ class Tensor:
                     if g is None or p.grad is None:
                         continue
                     p.grad += g
-
-
-
     @log_operation("addition")
     def __add__(self, other):
         print(f"from add def{other.data}")
@@ -116,77 +108,27 @@ class Tensor:
     def __truediv__(self, other):
         if not isinstance(other, Tensor):
             other = Tensor(other)
-        out = Tensor(self.data / other.data, '/', requires_grad=self.requires_grad or other.requires_grad)
-        out._parents.update({self, other})
-
-        def _backward():
-            if self.requires_grad:
-                self.grad += (1 / other.data) * out.grad
-            if other.requires_grad:
-                other.grad += (-self.data / (other.data ** 2)) * out.grad
-        out._backward = _backward
-        return out
+        return TrueDiv.compute(self, other)
 
     @log_operation("pow")
     def __pow__(self, other):
         if not isinstance(other, Tensor):
             other = Tensor(other)
-        out = Tensor(self.data ** other.data, '**', requires_grad=self.requires_grad or other.requires_grad)
-        out._parents.update({self, other})
-
-        def _backward():
-            if self.requires_grad:
-                self.grad += other.data * (self.data ** (other.data - 1)) * out.grad
-            if other.requires_grad:
-                other.grad += (self.data ** other.data) * np.log(self.data) * out.grad
-        out._backward = _backward
-        return out
+        return Pow.compute(self, other)
 
     @log_operation("matmul")
+    def matmul(self, other):
+        if not isinstance(other, Tensor):
+            other = Tensor(other)
+        return MatMul.compute(self, other)
     def __matmul__(self, other):
         if not isinstance(other, Tensor):
             other = Tensor(other)
         return MatMul.compute(self, other)
-
-
+    
     @log_operation("relu")
     def relu(self):
-        y = np.where(self.data > 0, self.data, 0.0)
-        out = Tensor(y, 'relu', requires_grad=self.requires_grad)
-        out._parents.add(self)
-
-        def _backward():
-            if self.requires_grad:
-                grad_mask = (self.data > 0).astype(self.data.dtype)
-                self.grad += grad_mask * out.grad
-        out._backward = _backward
-        return out
-
-    @log_operation("sigmoid")
-    def sigmoid(self):
-        s = 1.0 / (1.0 + np.exp(-self.data))
-        out = Tensor(s, 'sigmoid', requires_grad=self.requires_grad)
-        out._parents.add(self)
-
-        def _backward():
-            if self.requires_grad:
-                self.grad += s * (1 - s) * out.grad
-        out._backward = _backward
-        return out
-
-    @log_operation("tanh")
-    def tanh(self):
-        t = np.tanh(self.data)
-        out = Tensor(t, 'tanh', requires_grad=self.requires_grad)
-        out._parents.add(self)
-
-        def _backward():
-            if self.requires_grad:
-                self.grad += (1 - t ** 2) * out.grad
-        out._backward = _backward
-        return out
-
-
+        return Relu.compute(self)
     def zero_grad(self):
         self.grad = np.zeros_like(self.data) if self.requires_grad else None
 
@@ -203,3 +145,6 @@ class Tensor:
 
     def __repr__(self):
         return f"Tensor(data={self.data}, requires_grad={self.requires_grad}, grad={self.grad})"
+if __name__ == "__main__":
+    print("e")
+    print(example.add(1,2))

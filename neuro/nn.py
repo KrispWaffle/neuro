@@ -1,3 +1,4 @@
+import math
 from neuro.core import *
 
 def dot(vec, vec2):
@@ -51,3 +52,40 @@ def MSE(y,x ):
     for i in n:
         error += math.pow(y.data[i] - x.data[i],2)
     return error/len(y.data)
+
+
+@log_operation("relu")
+def relu(self):
+    y = np.where(self.data > 0, self.data, 0.0)
+    out = Tensor(y, 'relu', requires_grad=self.requires_grad)
+    out._parents.add(self)
+
+    def _backward():
+        if self.requires_grad:
+            grad_mask = (self.data > 0).astype(self.data.dtype)
+            self.grad += grad_mask * out.grad
+    out._backward = _backward
+    return out
+@log_operation("sigmoid")
+def sigmoid(self):
+    s = 1.0 / (1.0 + np.exp(-self.data))
+    out = Tensor(s, 'sigmoid', requires_grad=self.requires_grad)
+    out._parents.add(self)
+
+    def _backward():
+        if self.requires_grad:
+            self.grad += s * (1 - s) * out.grad
+    out._backward = _backward
+    return out
+
+@log_operation("tanh")
+def tanh(self):
+    t = np.tanh(self.data)
+    out = Tensor(t, 'tanh', requires_grad=self.requires_grad)
+    out._parents.add(self)
+
+    def _backward():
+        if self.requires_grad:
+            self.grad += (1 - t ** 2) * out.grad
+    out._backward = _backward
+    return out
