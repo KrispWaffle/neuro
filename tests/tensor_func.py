@@ -1,8 +1,9 @@
 import sys
 import os
 import numpy as np
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../")))
-
+from neuro.core import Tensor
+from neuro.nn import *
+from neuro.graphs import print_graph
 
 def test_backwardFunc():
     scalar = Tensor(3.0, requires_grad=True)
@@ -48,8 +49,8 @@ def test_graphdraw():
     L = h * e   # L = 25 * 6 = 150
 
     L.backward()
-    graph = draw_dot(L)
-    graph.render('test', format='png')
+    print_graph(L)
+    
     print("Graph rendered: ✓")
 
 
