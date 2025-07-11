@@ -75,20 +75,7 @@ def print_comp(comp):
     for i in comp:
         print(i)
         
-def realize(program: Program):
-   sorted =  topo_sort(program)
-   print("called realize")
-   buffer:dict[float, np.array] = {}
-   for i in sorted:
-       if i  == OpType.CONST:
-           buffer[i.id] = np.array(i.arg, dtype=i.dtype)
-       else:
-           operation = OP_MAP[i.op]
-           
-           input_data = [buffer[s.id] for s in i.src]
-           buffer[i.id] = operation(input_data)
-           
-   return buffer[sorted[-1].id]
+
     
             
 def topo_sort(Program: Program) -> list[Instr]:
@@ -104,7 +91,6 @@ def topo_sort(Program: Program) -> list[Instr]:
             indeg[m] -= 1
             if indeg[m] == 0:
                 ready.append(m)
-    print(order[::-1])
     return order[::-1] 
 def emit_cuda_kernel(comp: Program, kern_name="kernel"):
     body = []

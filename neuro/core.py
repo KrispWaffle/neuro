@@ -181,5 +181,19 @@ class Tensor(Op):
 
     def __repr__(self):
         return f"Tensor(data={self.data}, requires_grad={self.requires_grad}, grad={self.grad})"
-    def realize(self):
-       return  realize(comp)
+    
+    def realize(self,program: Program = comp):
+        sorted =  topo_sort(program)
+    
+        buffer:dict[float, np.array] = {}
+        for i in sorted:
+            if i.op == OpType.CONST:
+                buffer[i.id] = np.array(i.arg, dtype=i.dtype)
+            else:
+           
+                operation = OP_MAP[i.op]
+           
+                input_data = [buffer[s.id] for s in i.src]
+                buffer[i.id] = operation(input_data)
+        self.data = buffer[sorted[-1].id]
+        return buffer[sorted[-1].id]
