@@ -2,7 +2,8 @@ from typing import Optional, Type
 import numpy as np
 import os
 import logging
-from codegen import example
+from neuro.instr import *
+#from codegen import example
  
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG if os.getenv("DEBUG") == "1" else logging.INFO)
@@ -27,8 +28,15 @@ def log_operation(op_name):
         
         return wrapper
    
+   
     return decorator
 
+
+
+
+
+
+program = Program()
 class Op:
     def __init__(self, *parents):
         self.parents = parents         
@@ -47,21 +55,40 @@ class Op:
 
         requires_grad = any(t.requires_grad for t in input_tensors)
         out = Tensor(out_data, requires_grad=requires_grad)
-        if requires_grad:
-            out._ctx = ctx
+        out._ctx = ctx
+            
+        
         return out
-from neuro.ops import *
-class Tensor:
-    def __init__(self, data, requires_grad=False):
+from neuro.t_ops import *
+_REALIZE_OPS = {
+    OpType.ADD:    Add,
+    OpType.SUB:    Sub,
+    OpType.MUL:    Mul,
+    OpType.MATMUL: MatMul,
+   # OpType.SUM:    Sum,
+    OpType.RELU:   Relu,
+  #  OpType.DIV:    TrueDiv,
+   # OpType.POW:    Pow,
+}
+class Tensor(Op):
+    def __init__(self, data=None, device="cpu", node: Instr | None = None,requires_grad=False):
         self.dtype = np.float32
-        self.data = np.array(data, dtype=self.dtype)
+        if data is not None:
+            self.data = np.array(data, dtype=self.dtype)
+        else:
+            self.data = None
         self.requires_grad = requires_grad
+        if node is None:
+            self.node = program.append_and_return(Instr(OpType.CONST, self.dtype, arg=self.data))
+        else:
+            self.node = node
+        
         self.grad = np.zeros_like(self.data) if requires_grad else None
         self._ctx: Optional[Op] = None
-        self.shape = np.shape(self.data)                       
-
+        self.shape = self.data.shape if self.data is not None else None       
+        self.device = device
     def backward(self):
-        
+                        
         visited, topo = set(), []
         def build(t: "Tensor"):
             if t in visited:
@@ -85,29 +112,55 @@ class Tensor:
                     p.grad += g
     @log_operation("addition")
     def __add__(self, other):
-        print(f"from add def{other.data}")
         if not isinstance(other, Tensor):
             other = Tensor(other)
-        return Add.compute(self, other)            
+        n = program.append_and_return(
+            Instr(OpType.ADD, self.dtype, (self.node, other.node)))
+        self.node = n
+        requires_grad= self.requires_grad or other.requires_grad
+        out = Tensor(data=None, requires_grad=requires_grad, node=n)
+
+        if requires_grad:
+            out._ctx = Add(self, other)
+        return out
+                    
 
     @log_operation("subtraction")
     def __sub__(self, other):
         if not isinstance(other, Tensor):
             other = Tensor(other)
-        return Sub.compute(self, other)
+        n = program.append_and_return(
+            Instr(OpType.SUB, self.dtype, (self.node, other.node)))
+        self.node = n
+        requires_grad= self.requires_grad or other.requires_grad
+        out = Tensor(data=None, requires_grad=requires_grad, node=n)
 
+        if requires_grad:
+            out._ctx = Sub(self, other)
+        return out
 
     @log_operation("multiply")
     def __mul__(self, other):
         if not isinstance(other, Tensor):
             other = Tensor(other)
-        return Mul.compute(self, other)
+        n = program.append_and_return(
+            Instr(OpType.MUL, self.dtype, (self.node, other.node)))
+        self.node = n
+        requires_grad= self.requires_grad or other.requires_grad
+        out = Tensor(data=None, requires_grad=requires_grad, node=n)
+
+        if requires_grad:
+            out._ctx = Mul(self, other)
+        return out
 
 
     @log_operation("truediv")
     def __truediv__(self, other):
         if not isinstance(other, Tensor):
             other = Tensor(other)
+        n = program.append_and_return(
+            Instr(OpType, self.dtype, (self.node, other.node)))
+        self.node = n    
         return TrueDiv.compute(self, other)
 
     @log_operation("pow")
@@ -120,14 +173,23 @@ class Tensor:
     def matmul(self, other):
         if not isinstance(other, Tensor):
             other = Tensor(other)
+        n = program.append_and_return(
+            Instr(OpType.MATMUL, self.dtype, (self.node, other.node)))
+        self.node = n
         return MatMul.compute(self, other)
     def __matmul__(self, other):
         if not isinstance(other, Tensor):
             other = Tensor(other)
+        n = program.append_and_return(
+            Instr(OpType.MATMUL, self.dtype, (self.node, other.node)))
+        self.node = n
         return MatMul.compute(self, other)
     
     @log_operation("relu")
     def relu(self):
+        n = program.append_and_return(
+            Instr(OpType.RELU, self.dtype, self.node))
+        self.node = n
         return Relu.compute(self)
     def zero_grad(self):
         self.grad = np.zeros_like(self.data) if self.requires_grad else None
@@ -145,6 +207,27 @@ class Tensor:
 
     def __repr__(self):
         return f"Tensor(data={self.data}, requires_grad={self.requires_grad}, grad={self.grad})"
-if __name__ == "__main__":
-    print("e")
-    print(example.add(1,2))
+    
+    def realize(self,program: Program = program):
+        sorted =  topo_sort(program)
+    
+        buffer:dict[float, np.array] = {}
+        for i in sorted:
+            if i.op == OpType.CONST:
+                buffer[i.id] = np.array(i.arg, dtype=i.dtype)
+            else:
+           
+                OpCls = _REALIZE_OPS.get(i.op)
+                if OpCls is None:
+                    raise NotImplementedError(f"No CPU fallback for {i.op}")
+           
+                input_data = [buffer[s.id] for s in i.src]
+                ctx = OpCls()
+                out = ctx.forward(*input_data)
+
+                buffer[i.id] = out
+        self.data = buffer[sorted[-1].id]
+        if(os.getenv("DEBUG") == "1"):
+            print()
+            print(emit_cuda_kernel(program))
+        return buffer[sorted[-1].id]

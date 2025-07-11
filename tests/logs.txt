@@ -1,1 +1,0 @@
-<function log_operation.<locals>.decorator.<locals>.wrapper at 0x103f46480>
