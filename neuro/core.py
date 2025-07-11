@@ -2,7 +2,8 @@ from typing import Optional, Type
 import numpy as np
 import os
 import logging
-from codegen import example
+from neuro.instr import *
+#from codegen import example
  
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG if os.getenv("DEBUG") == "1" else logging.INFO)
@@ -27,8 +28,14 @@ def log_operation(op_name):
         
         return wrapper
    
+   
     return decorator
 
+
+
+
+
+comp = Program()
 class Op:
     def __init__(self, *parents):
         self.parents = parents         
@@ -47,21 +54,24 @@ class Op:
 
         requires_grad = any(t.requires_grad for t in input_tensors)
         out = Tensor(out_data, requires_grad=requires_grad)
-        if requires_grad:
-            out._ctx = ctx
+        out._ctx = ctx
+            
+        
         return out
-from neuro.ops import *
-class Tensor:
-    def __init__(self, data, requires_grad=False):
+from neuro.t_ops import *
+
+class Tensor(Op):
+    def __init__(self, data, device="cpu", node: Instr | None = None,requires_grad=False):
         self.dtype = np.float32
         self.data = np.array(data, dtype=self.dtype)
         self.requires_grad = requires_grad
+        self.node = node or comp.append_and_return(Instr(OpType.CONST,self.dtype, arg=self.data))
         self.grad = np.zeros_like(self.data) if requires_grad else None
         self._ctx: Optional[Op] = None
         self.shape = np.shape(self.data)                       
-
+        self.device = device
     def backward(self):
-        
+                        
         visited, topo = set(), []
         def build(t: "Tensor"):
             if t in visited:
@@ -85,15 +95,26 @@ class Tensor:
                     p.grad += g
     @log_operation("addition")
     def __add__(self, other):
-        print(f"from add def{other.data}")
         if not isinstance(other, Tensor):
             other = Tensor(other)
-        return Add.compute(self, other)            
+        n = comp.append_and_return(
+            Instr(OpType.ADD, self.dtype, (self.node, other.node)))
+        self.node = n
+        requires_grad= self.requires_grad or other.requires_grad
+        out = Tensor(data=None, requires_grad=requires_grad, node=n)
+
+        if requires_grad:
+            out._ctx = Sub(self, other)
+        return out
+                    
 
     @log_operation("subtraction")
     def __sub__(self, other):
         if not isinstance(other, Tensor):
             other = Tensor(other)
+        n = comp.append_and_return(
+            Instr(OpType.SUB, self.dtype, (self.node, other.node)))
+        self.node = n    
         return Sub.compute(self, other)
 
 
@@ -101,6 +122,9 @@ class Tensor:
     def __mul__(self, other):
         if not isinstance(other, Tensor):
             other = Tensor(other)
+        n = comp.append_and_return(
+            Instr(OpType.MUL, self.dtype, (self.node, other.node)))
+        self.node = n    
         return Mul.compute(self, other)
 
 
@@ -108,6 +132,9 @@ class Tensor:
     def __truediv__(self, other):
         if not isinstance(other, Tensor):
             other = Tensor(other)
+        n = comp.append_and_return(
+            Instr(OpType, self.dtype, (self.node, other.node)))
+        self.node = n    
         return TrueDiv.compute(self, other)
 
     @log_operation("pow")
@@ -120,14 +147,23 @@ class Tensor:
     def matmul(self, other):
         if not isinstance(other, Tensor):
             other = Tensor(other)
+        n = comp.append_and_return(
+            Instr(OpType.MATMUL, self.dtype, (self.node, other.node)))
+        self.node = n
         return MatMul.compute(self, other)
     def __matmul__(self, other):
         if not isinstance(other, Tensor):
             other = Tensor(other)
+        n = comp.append_and_return(
+            Instr(OpType.MATMUL, self.dtype, (self.node, other.node)))
+        self.node = n
         return MatMul.compute(self, other)
     
     @log_operation("relu")
     def relu(self):
+        n = comp.append_and_return(
+            Instr(OpType.RELU, self.dtype, self.node))
+        self.node = n
         return Relu.compute(self)
     def zero_grad(self):
         self.grad = np.zeros_like(self.data) if self.requires_grad else None
@@ -145,6 +181,5 @@ class Tensor:
 
     def __repr__(self):
         return f"Tensor(data={self.data}, requires_grad={self.requires_grad}, grad={self.grad})"
-if __name__ == "__main__":
-    print("e")
-    print(example.add(1,2))
+    def realize(self):
+       return  realize(comp)

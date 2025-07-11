@@ -10,6 +10,14 @@ def dot(vec, vec2):
         return result
 
 
+
+'''
+
+
+NEED TO FIX NOT WORKING 
+
+
+'''
 @log_operation("softmax")
 def softmax(tensor, beta=1):
         
@@ -54,18 +62,7 @@ def MSE(y,x ):
     return error/len(y.data)
 
 
-@log_operation("relu")
-def relu(self):
-    y = np.where(self.data > 0, self.data, 0.0)
-    out = Tensor(y, 'relu', requires_grad=self.requires_grad)
-    out._parents.add(self)
 
-    def _backward():
-        if self.requires_grad:
-            grad_mask = (self.data > 0).astype(self.data.dtype)
-            self.grad += grad_mask * out.grad
-    out._backward = _backward
-    return out
 @log_operation("sigmoid")
 def sigmoid(self):
     s = 1.0 / (1.0 + np.exp(-self.data))
