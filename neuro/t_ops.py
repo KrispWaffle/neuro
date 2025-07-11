@@ -11,6 +11,7 @@ def sum_to_shape(grad, shape):
     return grad
 class Add(Op):
     def forward(self, a, b):
+        
         self.save_for_backward(a,b)
         return a+b
     def backward(self, grad_out):

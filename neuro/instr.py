@@ -14,14 +14,7 @@ class OpType(Enum):
     RELU = auto()
     MATMUL = auto()      
 _id_gen = itertools.count()
-OP_MAP = {
-    OpType.ADD:    lambda inputs: inputs[0] + inputs[1],
-    OpType.SUB:    lambda inputs: inputs[0] - inputs[1],
-    OpType.MUL:    lambda inputs: inputs[0] * inputs[1],
-    OpType.MATMUL: lambda inputs: np.matmul(inputs[0], inputs[1]),
-    OpType.RELU:   lambda inputs: np.maximum(inputs[0], 0),
-   
-}
+
 @dataclass(frozen=True, slots=True, eq=False)
 class Instr:
     op: OpType
@@ -48,11 +41,16 @@ def add_stores(comp: Program, base="out"):
     for k, instr in enumerate(sinks):
         comp.append_and_return(
             Instr(OpType.STORE, instr.dtype,
-                  src=(instr,), arg=f"{base}{k if len(sinks)>1 else ''}"))
+                  src=(instr,), arg=f"{base}"))
 EmitFn = Callable[[Instr],str]
+map = {
+    0: "a",
+    1: "b",
+}
 def _emit_const(i: Instr) -> str:
     name = f"tmp{i.id}"
-    return f"float {name} = {i.arg};"
+    var = map.get(i.id, str(i.id))
+    return f"float {name} = {var}[idx];"
 
 def _emit_binary(op_symbol: str) -> EmitFn:
     def fn(i: Instr) -> str:
@@ -71,6 +69,8 @@ RULES: Dict[OpType, EmitFn] = {
     OpType.LOAD  : lambda i: f"float tmp{i.id} = {i.arg}[idx];",
     OpType.STORE : lambda i: f"{i.arg}[idx] = tmp{i.src[0].id};",
 }
+
+
 def print_comp(comp):
     for i in comp:
         print(i)
@@ -92,11 +92,11 @@ def topo_sort(Program: Program) -> list[Instr]:
             if indeg[m] == 0:
                 ready.append(m)
     return order[::-1] 
-def emit_cuda_kernel(comp: Program, kern_name="kernel"):
+def emit_cuda_kernel(program: Program, kern_name="kernel"):
     body = []
-    add_stores(comp=comp )
-
-    for instr in topo_sort(comp):
+    add_stores(program)
+    
+    for instr in topo_sort(program):
         body.append("    " + RULES[instr.op](instr))
     body_str = "\n".join(body)
 
@@ -107,3 +107,4 @@ __global__ void {kern_name}(int N, const float* a, const float* b, float* out) {
 {body_str}
 }}
 """.strip()
+

@@ -35,7 +35,8 @@ def log_operation(op_name):
 
 
 
-comp = Program()
+
+program = Program()
 class Op:
     def __init__(self, *parents):
         self.parents = parents         
@@ -59,16 +60,32 @@ class Op:
         
         return out
 from neuro.t_ops import *
-
+_REALIZE_OPS = {
+    OpType.ADD:    Add,
+    OpType.SUB:    Sub,
+    OpType.MUL:    Mul,
+    OpType.MATMUL: MatMul,
+   # OpType.SUM:    Sum,
+    OpType.RELU:   Relu,
+  #  OpType.DIV:    TrueDiv,
+   # OpType.POW:    Pow,
+}
 class Tensor(Op):
-    def __init__(self, data, device="cpu", node: Instr | None = None,requires_grad=False):
+    def __init__(self, data=None, device="cpu", node: Instr | None = None,requires_grad=False):
         self.dtype = np.float32
-        self.data = np.array(data, dtype=self.dtype)
+        if data is not None:
+            self.data = np.array(data, dtype=self.dtype)
+        else:
+            self.data = None
         self.requires_grad = requires_grad
-        self.node = node or comp.append_and_return(Instr(OpType.CONST,self.dtype, arg=self.data))
+        if node is None:
+            self.node = program.append_and_return(Instr(OpType.CONST, self.dtype, arg=self.data))
+        else:
+            self.node = node
+        
         self.grad = np.zeros_like(self.data) if requires_grad else None
         self._ctx: Optional[Op] = None
-        self.shape = np.shape(self.data)                       
+        self.shape = self.data.shape if self.data is not None else None       
         self.device = device
     def backward(self):
                         
@@ -97,14 +114,14 @@ class Tensor(Op):
     def __add__(self, other):
         if not isinstance(other, Tensor):
             other = Tensor(other)
-        n = comp.append_and_return(
+        n = program.append_and_return(
             Instr(OpType.ADD, self.dtype, (self.node, other.node)))
         self.node = n
         requires_grad= self.requires_grad or other.requires_grad
         out = Tensor(data=None, requires_grad=requires_grad, node=n)
 
         if requires_grad:
-            out._ctx = Sub(self, other)
+            out._ctx = Add(self, other)
         return out
                     
 
@@ -112,27 +129,36 @@ class Tensor(Op):
     def __sub__(self, other):
         if not isinstance(other, Tensor):
             other = Tensor(other)
-        n = comp.append_and_return(
+        n = program.append_and_return(
             Instr(OpType.SUB, self.dtype, (self.node, other.node)))
-        self.node = n    
-        return Sub.compute(self, other)
+        self.node = n
+        requires_grad= self.requires_grad or other.requires_grad
+        out = Tensor(data=None, requires_grad=requires_grad, node=n)
 
+        if requires_grad:
+            out._ctx = Sub(self, other)
+        return out
 
     @log_operation("multiply")
     def __mul__(self, other):
         if not isinstance(other, Tensor):
             other = Tensor(other)
-        n = comp.append_and_return(
+        n = program.append_and_return(
             Instr(OpType.MUL, self.dtype, (self.node, other.node)))
-        self.node = n    
-        return Mul.compute(self, other)
+        self.node = n
+        requires_grad= self.requires_grad or other.requires_grad
+        out = Tensor(data=None, requires_grad=requires_grad, node=n)
+
+        if requires_grad:
+            out._ctx = Mul(self, other)
+        return out
 
 
     @log_operation("truediv")
     def __truediv__(self, other):
         if not isinstance(other, Tensor):
             other = Tensor(other)
-        n = comp.append_and_return(
+        n = program.append_and_return(
             Instr(OpType, self.dtype, (self.node, other.node)))
         self.node = n    
         return TrueDiv.compute(self, other)
@@ -147,21 +173,21 @@ class Tensor(Op):
     def matmul(self, other):
         if not isinstance(other, Tensor):
             other = Tensor(other)
-        n = comp.append_and_return(
+        n = program.append_and_return(
             Instr(OpType.MATMUL, self.dtype, (self.node, other.node)))
         self.node = n
         return MatMul.compute(self, other)
     def __matmul__(self, other):
         if not isinstance(other, Tensor):
             other = Tensor(other)
-        n = comp.append_and_return(
+        n = program.append_and_return(
             Instr(OpType.MATMUL, self.dtype, (self.node, other.node)))
         self.node = n
         return MatMul.compute(self, other)
     
     @log_operation("relu")
     def relu(self):
-        n = comp.append_and_return(
+        n = program.append_and_return(
             Instr(OpType.RELU, self.dtype, self.node))
         self.node = n
         return Relu.compute(self)
@@ -182,7 +208,7 @@ class Tensor(Op):
     def __repr__(self):
         return f"Tensor(data={self.data}, requires_grad={self.requires_grad}, grad={self.grad})"
     
-    def realize(self,program: Program = comp):
+    def realize(self,program: Program = program):
         sorted =  topo_sort(program)
     
         buffer:dict[float, np.array] = {}
@@ -191,9 +217,17 @@ class Tensor(Op):
                 buffer[i.id] = np.array(i.arg, dtype=i.dtype)
             else:
            
-                operation = OP_MAP[i.op]
+                OpCls = _REALIZE_OPS.get(i.op)
+                if OpCls is None:
+                    raise NotImplementedError(f"No CPU fallback for {i.op}")
            
                 input_data = [buffer[s.id] for s in i.src]
-                buffer[i.id] = operation(input_data)
+                ctx = OpCls()
+                out = ctx.forward(*input_data)
+
+                buffer[i.id] = out
         self.data = buffer[sorted[-1].id]
+        if(os.getenv("DEBUG") == "1"):
+            print()
+            print(emit_cuda_kernel(program))
         return buffer[sorted[-1].id]
